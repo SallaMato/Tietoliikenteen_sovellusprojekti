@@ -27,12 +27,12 @@
 #define USER_BUTTON_3           DK_BTN3_MSK
 #define USER_BUTTON_4           DK_BTN4_MSK
 
-LOG_MODULE_REGISTER(MAIN, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 static void button_changed(uint32_t button_state, uint32_t has_changed)
 {
-	//printk("button_state = %d\n",button_state);
-	//printk("has_changed = %d\n",has_changed);
+	printk("button_state = %d\n",button_state);
+	printk("has_changed = %d\n",has_changed);
 	if ((has_changed & USER_BUTTON_1) && (button_state & USER_BUTTON_1)) 
 	{
 		printk("Nappi 1 alhaalla\n");
@@ -55,26 +55,26 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 }
 
 
-void main(void)
+int main(void)
 {
 	int err;
 	err = dk_leds_init();
 	if (err) {
 		LOG_ERR("LEDs init failed (err %d)\n", err);
-		return;
+		return -1;
 	}
 
 	err = dk_buttons_init(button_changed);
 	if (err) {
 		printk("Cannot init buttons (err: %d)\n", err);
-		return;
+		return -1;
 	}
 	
 	
 	if(initializeADC() != 0)
 	{
 	printk("ADC initialization failed!");
-	return;
+	return -1;
 	}
 
 	while (1) 

@@ -79,11 +79,11 @@ struct Measurement readADCValue(void)
 		int err;
         int32_t val_mv;
         // For debug use... 
-		/*
+		
         printk("- %s, channel %d: ",
 		       adc_channels[i].dev->name,
 		       adc_channels[i].channel_id);
-        */
+        
 
 		(void)adc_sequence_init_dt(&adc_channels[i], &sequence);
 
@@ -104,7 +104,7 @@ struct Measurement readADCValue(void)
             {
                 m.z = val_mv;
             }           
-			//printk("%"PRId16, buf);
+			printk("%"PRId16, buf);
 		}
 
 		
@@ -128,7 +128,7 @@ struct Measurement readADCValue(void)
             {
                 m.z = val_mv;
             }           
-            //printk(" = %"PRId32" mV\n", val_mv);
+            printk(" = %"PRId32" mV\n", val_mv);
 		}
 	}
     return m;
