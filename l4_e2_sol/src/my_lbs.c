@@ -21,7 +21,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
-
+#include "adc.h"
 #include "my_lbs.h"
 
 LOG_MODULE_DECLARE(Lesson4_Exercise2);
@@ -143,7 +143,7 @@ int my_lbs_send_button_state_indicate(bool button_state)
 }
 
 /* STEP 14 - Define the function to send notifications for the MYSENSOR characteristic */
-int my_lbs_send_sensor_notify(uint32_t sensor_value)
+int my_lbs_send_sensor_notify(struct Measurement sensor_value)
 {
 	if (!notify_mysensor_enabled) {
 		return -EACCES;

@@ -97,10 +97,18 @@ static bool app_button_cb(void)
 void send_data_thread(void)
 {
 	while (1) {
+		struct Measurement m = readADCValue();
+
+		m.x = 1;
+		m.y = 2;
+		m.z = 3;
 		/* Simulate data */
 		simulate_data();
 		/* Send notification, the function sends notifications only if a client is subscribed */
-		my_lbs_send_sensor_notify(app_sensor_value);
+		my_lbs_send_sensor_notify(m);
+		//my_lbs_send_sensor_notify(1);
+		//my_lbs_send_sensor_notify(2);
+		//my_lbs_send_sensor_notify(3);
 
 		k_sleep(K_MSEC(NOTIFY_INTERVAL));
 	}
@@ -120,7 +128,7 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 		app_button_state = user_button_state ? true : false;
 		if (user_button_state) {
 			suunta = (suunta + 1) % 6;
-			printk("Direction: %d\n", suunta);
+			
 		} 
 		
 	}
@@ -205,6 +213,7 @@ int main(void)
 
 	for (;;) {
 		struct Measurement m = readADCValue();
+		printk("Direction: %d\n", suunta);
 		printk("x = %d,  y = %d,  z = %d\n",m.x,m.y,m.z);
 		
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
