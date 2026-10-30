@@ -34,11 +34,15 @@ extern "C" {
 #define BT_UUID_LBS_MYSENSOR_VAL                                                                   \
 	BT_UUID_128_ENCODE(0x00001526, 0x1212, 0xefde, 0x1523, 0x785feabcd123)
 
+#define BT_UUID_LBS_SUUNTA_VAL                                                                   \
+	BT_UUID_128_ENCODE(0x00001527, 0x1212, 0xefde, 0x1523, 0x785feabcd123)
+
 #define BT_UUID_LBS BT_UUID_DECLARE_128(BT_UUID_LBS_VAL)
 #define BT_UUID_LBS_BUTTON BT_UUID_DECLARE_128(BT_UUID_LBS_BUTTON_VAL)
 #define BT_UUID_LBS_LED BT_UUID_DECLARE_128(BT_UUID_LBS_LED_VAL)
 /* STEP 11.2 - Convert the array to a generic UUID */
 #define BT_UUID_LBS_MYSENSOR BT_UUID_DECLARE_128(BT_UUID_LBS_MYSENSOR_VAL)
+#define BT_UUID_LBS_SUUNTA BT_UUID_DECLARE_128(BT_UUID_LBS_SUUNTA_VAL)
 
 /** @brief Callback type for when an LED state change is received. */
 typedef void (*led_cb_t)(const bool led_state);
@@ -104,6 +108,8 @@ int my_lbs_send_button_state_notify(bool button_state);
  *           Otherwise, a (negative) error code is returned.
  */
 int my_lbs_send_sensor_notify(struct Measurement sensor_value);
+
+int my_lbs_send_suunta_notify(uint32_t suunta_value);
 
 #ifdef __cplusplus
 }

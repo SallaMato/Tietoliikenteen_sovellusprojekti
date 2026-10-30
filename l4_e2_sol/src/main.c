@@ -99,9 +99,9 @@ void send_data_thread(void)
 	while (1) {
 		struct Measurement m = readADCValue();
 
-		m.x = 1;
+		/*m.x = 1;
 		m.y = 2;
-		m.z = 3;
+		m.z = 3;*/
 		/* Simulate data */
 		simulate_data();
 		/* Send notification, the function sends notifications only if a client is subscribed */
@@ -109,7 +109,8 @@ void send_data_thread(void)
 		//my_lbs_send_sensor_notify(1);
 		//my_lbs_send_sensor_notify(2);
 		//my_lbs_send_sensor_notify(3);
-
+		my_lbs_send_suunta_notify(suunta);
+		
 		k_sleep(K_MSEC(NOTIFY_INTERVAL));
 	}
 }

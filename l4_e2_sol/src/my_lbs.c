@@ -26,6 +26,7 @@
 
 LOG_MODULE_DECLARE(Lesson4_Exercise2);
 
+static bool notify_suunta_enabled;
 static bool notify_mysensor_enabled;
 static bool indicate_enabled;
 static bool button_state;
@@ -44,6 +45,11 @@ static void mylbsbc_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t va
 static void mylbsbc_ccc_mysensor_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
 	notify_mysensor_enabled = (value == BT_GATT_CCC_NOTIFY);
+}
+
+static void mylbsbc_ccc_suunta_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
+{
+	notify_suunta_enabled = (value == BT_GATT_CCC_NOTIFY);
 }
 
 // This function is called when a remote device has acknowledged the indication at its host layer
@@ -111,10 +117,19 @@ BT_GATT_SERVICE_DEFINE(
 	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_LED, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE, NULL,
 			       write_led, NULL),
 	/* STEP 12 - Create and add the MYSENSOR characteristic and its CCCD  */
+
+	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_SUUNTA, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL,
+			       NULL, NULL),
+
+	BT_GATT_CCC(mylbsbc_ccc_suunta_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+
 	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_MYSENSOR, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL,
 			       NULL, NULL),
 
+
 	BT_GATT_CCC(mylbsbc_ccc_mysensor_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+
+
 
 );
 /* A function to register application callbacks for the LED and Button characteristics  */
@@ -150,4 +165,13 @@ int my_lbs_send_sensor_notify(struct Measurement sensor_value)
 	}
 
 	return bt_gatt_notify(NULL, &my_lbs_svc.attrs[7], &sensor_value, sizeof(sensor_value));
+}
+
+int my_lbs_send_suunta_notify(uint32_t suunta_value)
+{
+	if (!notify_suunta_enabled) {
+		return -EACCES;
+	}
+
+	return bt_gatt_notify(NULL, &my_lbs_svc.attrs[7], &suunta_value, sizeof(suunta_value));
 }
