@@ -12,6 +12,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <dk_buttons_and_leds.h>
 #include "my_lbs.h"
+#include "adc.h"
 
 static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
 	(BT_LE_ADV_OPT_CONN |
@@ -187,7 +188,17 @@ int main(void)
 	LOG_INF("Bluetooth initialized\n");
 	k_work_init(&adv_work, adv_work_handler);
 	advertising_start();
+
+	if(initializeADC() != 0)
+	{
+		printk("ADC initialization failed!");
+		return -1;
+	}
+
 	for (;;) {
+		struct Measurement m = readADCValue();
+		printk("x = %d,  y = %d,  z = %d\n",m.x,m.y,m.z);
+		
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
 		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL));
 	}
