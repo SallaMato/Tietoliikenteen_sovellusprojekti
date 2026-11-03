@@ -42,7 +42,7 @@ LOG_MODULE_REGISTER(Lesson4_Exercise2, LOG_LEVEL_INF);
 static bool app_button_state;
 static struct k_work adv_work;
 static bool should_collect_data = false;
-#define MAX_MEASUREMENTS 10
+#define MAX_MEASUREMENTS 100
 static struct Measurement collected_data[MAX_MEASUREMENTS];
 #define MEASUREMENTS_INTERVAL 200 
 static bool should_send_data = false;
@@ -95,7 +95,7 @@ void collect_data_thread(void)
 	printk("Data collection thread started\n");
 	while(1) {
 		if (should_collect_data) {
-			for (int i = 0; i < 10; i++) {
+			for (int i = 0; i < MAX_MEASUREMENTS; i++) {
 				struct Measurement m = readADCValue();
 
 				// Sending known values for debugging
@@ -112,6 +112,7 @@ void collect_data_thread(void)
 		should_send_data = true;
 		printk("Data collection complete, ready to send data\n");
 		}
+		k_sleep(K_MSEC(100)); // Sleep for a short time to avoid busy waiting
 	}
 }
 /* STEP 18.1 - Define the thread function  */
@@ -135,6 +136,7 @@ void send_data_thread(void)
 			}
 			should_send_data = false;
 		}
+		k_sleep(K_MSEC(100)); // Sleep for a short time to avoid busy waiting
 	}
 }
 
