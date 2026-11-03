@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(Lesson4_Exercise2, LOG_LEVEL_INF);
 #define CON_STATUS_LED DK_LED2
 #define USER_LED DK_LED3
 #define USER_BUTTON DK_BTN1_MSK
+#define USER_BUTTON2 DK_BTN2_MSK
 
 
 #define STACKSIZE 1024
@@ -40,6 +41,11 @@ LOG_MODULE_REGISTER(Lesson4_Exercise2, LOG_LEVEL_INF);
 #define NOTIFY_INTERVAL 500
 static bool app_button_state;
 static struct k_work adv_work;
+static bool should_collect_data = false;
+#define MAX_MEASUREMENTS 10
+static struct Measurement collected_data[MAX_MEASUREMENTS];
+#define MEASUREMENTS_INTERVAL 200 
+static bool should_send_data = false;
 
 //(0 = X alas, 1 = X ylos, 2 = Y alas, 3 = Y ylös, 4 = Z alas, 5 = Z ylös)
 volatile int suunta = 0;
@@ -84,23 +90,51 @@ static bool app_button_cb(void)
 {
 	return app_button_state;
 }
+void collect_data_thread(void)
+{
+	printk("Data collection thread started\n");
+	while(1) {
+		if (should_collect_data) {
+			for (int i = 0; i < 10; i++) {
+				struct Measurement m = readADCValue();
 
+				// Sending known values for debugging
+				m.suunta = suunta;
+				m.x = i;
+				m.y = 12348;
+				m.z = 3;
+
+				collected_data[i] = m;
+				printk("Collected data %d: Direction: %d, x = %d,  y = %d,  z = %d\n", i, m.suunta, m.x, m.y, m.z);
+				k_sleep(K_MSEC(MEASUREMENTS_INTERVAL));
+			}
+		should_collect_data = false;
+		should_send_data = true;
+		printk("Data collection complete, ready to send data\n");
+		}
+	}
+}
 /* STEP 18.1 - Define the thread function  */
 void send_data_thread(void)
 {
 	while (1) {
-		struct Measurement m = readADCValue();
+		/*struct Measurement m = readADCValue();
 
 		// Sending known values for debugging
 		m.suunta = suunta;
 		m.x = 1;
 		m.y = 12348;
 		m.z = 3;
+		*/
 
 		/* Send notification, the function sends notifications only if a client is subscribed */
-		my_lbs_send_sensor_notify(m);
-		
-		k_sleep(K_MSEC(NOTIFY_INTERVAL));
+		if (should_send_data) {
+			for (int i = 0; i < MAX_MEASUREMENTS; i++) {
+				my_lbs_send_sensor_notify(collected_data[i]);
+				k_sleep(K_MSEC(NOTIFY_INTERVAL));
+			}
+			should_send_data = false;
+		}
 	}
 }
 
@@ -121,6 +155,14 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 			
 		} 
 		
+	}
+	if (has_changed & USER_BUTTON2) {
+		uint32_t user_button_state = button_state & USER_BUTTON2;
+		/* STEP 6 - Send indication on a button press */
+		//my_lbs_send_button_state_indicate(user_button_state);
+		app_button_state = user_button_state ? true : false;
+		should_collect_data = true;
+		printk("Nappia 2 painettu");
 	}
 }
 static void on_connected(struct bt_conn *conn, uint8_t err)
@@ -204,9 +246,9 @@ int main(void)
 	}
 
 	for (;;) {
-		struct Measurement m = readADCValue();
-		printk("Direction: %d\n", suunta);
-		printk("x = %d,  y = %d,  z = %d\n",m.x,m.y,m.z);
+		//struct Measurement m = readADCValue();
+		//printk("Direction: %d\n", suunta);
+		//printk("x = %d,  y = %d,  z = %d\n",m.x,m.y,m.z);
 		
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
 		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL));
@@ -214,3 +256,4 @@ int main(void)
 }
 /* STEP 18.2 - Define and initialize a thread to send data periodically */
 K_THREAD_DEFINE(send_data_thread_id, STACKSIZE, send_data_thread, NULL, NULL, NULL, PRIORITY, 0, 0);
+K_THREAD_DEFINE(collect_data_thread_id, STACKSIZE, collect_data_thread, NULL, NULL, NULL, PRIORITY, 0, 0);
