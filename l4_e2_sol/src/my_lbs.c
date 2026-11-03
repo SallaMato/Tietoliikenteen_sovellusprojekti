@@ -116,22 +116,19 @@ BT_GATT_SERVICE_DEFINE(
 
 	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_LED, BT_GATT_CHRC_WRITE, BT_GATT_PERM_WRITE, NULL,
 			       write_led, NULL),
+
 	/* STEP 12 - Create and add the MYSENSOR characteristic and its CCCD  */
+	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_MYSENSOR, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL,
+			       NULL, NULL),
+
+	BT_GATT_CCC(mylbsbc_ccc_mysensor_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 
 	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_SUUNTA, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL,
 			       NULL, NULL),
 
 	BT_GATT_CCC(mylbsbc_ccc_suunta_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-
-	BT_GATT_CHARACTERISTIC(BT_UUID_LBS_MYSENSOR, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL,
-			       NULL, NULL),
-
-
-	BT_GATT_CCC(mylbsbc_ccc_mysensor_cfg_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-
-
-
 );
+
 /* A function to register application callbacks for the LED and Button characteristics  */
 int my_lbs_init(struct my_lbs_cb *callbacks)
 {
@@ -173,5 +170,5 @@ int my_lbs_send_suunta_notify(uint32_t suunta_value)
 		return -EACCES;
 	}
 
-	return bt_gatt_notify(NULL, &my_lbs_svc.attrs[7], &suunta_value, sizeof(suunta_value));
+	return bt_gatt_notify(NULL, &my_lbs_svc.attrs[10], &suunta_value, sizeof(suunta_value));
 }

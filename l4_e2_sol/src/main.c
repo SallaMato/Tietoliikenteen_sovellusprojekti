@@ -40,10 +40,9 @@ LOG_MODULE_REGISTER(Lesson4_Exercise2, LOG_LEVEL_INF);
 #define NOTIFY_INTERVAL 500
 static bool app_button_state;
 static struct k_work adv_work;
-/* STEP 15 - Define the data you want to stream over Bluetooth LE */
-static uint32_t app_sensor_value = 100;
 
-volatile int suunta = 0; //(0 = X alas, 1 = X ylos, 2 = Y alas, 3 = Y ylös, 4 = Z alas, 5 = Z ylös)
+//(0 = X alas, 1 = X ylos, 2 = Y alas, 3 = Y ylös, 4 = Z alas, 5 = Z ylös)
+volatile int suunta = 0;
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -75,14 +74,7 @@ static void recycled_cb(void)
 	printk("Connection object available from previous conn. Disconnect is complete!\n");
 	advertising_start();
 }
-/* STEP 16 - Define a function to simulate the data */
-static void simulate_data(void)
-{
-	app_sensor_value++;
-	if (app_sensor_value == 200) {
-		app_sensor_value = 100;
-	}
-}
+
 static void app_led_cb(bool led_state)
 {
 	dk_set_led(USER_LED, led_state);
@@ -99,16 +91,13 @@ void send_data_thread(void)
 	while (1) {
 		struct Measurement m = readADCValue();
 
-		/*m.x = 1;
-		m.y = 2;
-		m.z = 3;*/
-		/* Simulate data */
-		simulate_data();
+		// Sending known values for debugging
+		m.x = 1;
+		m.y = 12348;
+		m.z = 3;
+
 		/* Send notification, the function sends notifications only if a client is subscribed */
 		my_lbs_send_sensor_notify(m);
-		//my_lbs_send_sensor_notify(1);
-		//my_lbs_send_sensor_notify(2);
-		//my_lbs_send_sensor_notify(3);
 		my_lbs_send_suunta_notify(suunta);
 		
 		k_sleep(K_MSEC(NOTIFY_INTERVAL));
@@ -195,6 +184,7 @@ int main(void)
 		LOG_ERR("Bluetooth init failed (err %d)\n", err);
 		return -1;
 	}
+
 	bt_conn_cb_register(&connection_callbacks);
 
 	err = my_lbs_init(&app_callbacks);
@@ -202,6 +192,7 @@ int main(void)
 		printk("Failed to init LBS (err:%d)\n", err);
 		return -1;
 	}
+
 	LOG_INF("Bluetooth initialized\n");
 	k_work_init(&adv_work, adv_work_handler);
 	advertising_start();
