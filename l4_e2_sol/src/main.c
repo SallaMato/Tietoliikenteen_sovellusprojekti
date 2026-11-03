@@ -92,13 +92,13 @@ void send_data_thread(void)
 		struct Measurement m = readADCValue();
 
 		// Sending known values for debugging
+		m.suunta = suunta;
 		m.x = 1;
 		m.y = 12348;
 		m.z = 3;
 
 		/* Send notification, the function sends notifications only if a client is subscribed */
 		my_lbs_send_sensor_notify(m);
-		my_lbs_send_suunta_notify(suunta);
 		
 		k_sleep(K_MSEC(NOTIFY_INTERVAL));
 	}
