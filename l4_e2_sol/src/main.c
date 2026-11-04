@@ -206,6 +206,7 @@ static int init_button(void)
 
 int main(void)
 {
+	// test
 	int blink_status = 0;
 	int err;
 
