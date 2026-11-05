@@ -38,7 +38,6 @@ Esimerkki ohjelman ajamisesta:
 
 import sys
 import os
-import numpy as np
 import struct
 import csv
 import asyncio
@@ -56,8 +55,11 @@ writer = csv.writer(file)
 addr = os.getenv("DEVICE_ADDR")
 uuid = os.getenv("CHARACTERISTIC_UUID")
 packet_data_len_bytes = int(os.getenv("PACKET_DATA_LEN_BYTES"))
-measurement_len = int(os.getenv("MEASUREMENT_LEN_BYTES"))
+packets_before_shutdown = int(os.getenv("PACKETS_BEFORE_SHUTDOWN"))
 
+stop_event = asyncio.Event()
+packet_count = 0
+shutdown_requested = False
 
 # Prosessoidaan cmdline argumentit.
 if len(sys.argv) == 3:
@@ -71,33 +73,27 @@ elif addr is None or addr == "":
     print("Alternative: use a .env file with DEVICE_ADDR and CHARACTERISTIC_UUID variables")
     exit(1)
 
-# X, Y, Z
-def process_data1(data):
-    measurement = struct.unpack('HHHH', data)
-    print(f"x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
-
-    # Kirjoitetaan arvot csv tiedostoon. flush = pakottaa kirjoitetut arvot tallentumaan levylle asti heti
-    # TODO: Kannattaako flushia tehdä joka arvon kohdalla? Pitäisikö tehdä batcheittain????
-    writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
-    file.flush()
-    
-# Suunta, X, Y, Z
-def process_data2(data):
-    measurement = struct.unpack('HHHH', data)
-    print(f"Suunta: {measurement[0]}, x: {measurement[1]}, y: {measurement[2]}, z: {measurement[3]}")
-
-    # Kirjoitetaan arvot csv tiedostoon. flush = pakottaa kirjoitetut arvot tallentumaan levylle asti heti
-    # TODO: Kannattaako flushia tehdä joka arvon kohdalla? Pitäisikö tehdä batcheittain????
-    writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2]), str(measurement[3])]])
-    file.flush()
-
 def process_data(buffer):
-    suunta = struct.unpack('H', buffer)
-    for i in range ((packet_data_len_bytes - 1)//measurement_len):
-        measurement = struct.unpack('HHH', buffer[1+i*measurement_len])
+    global packet_count
+    global shutdown_requested
+    
+    if shutdown_requested:
+        return
+    
+    packet_count += 1
+    if packet_count == packets_before_shutdown:
+        shutdown_requested = True
+        stop_event.set()
+    
+    suunta = buffer[0]
+    print(f"----- Packet {packet_count} -----")
+    for i in range ((packet_data_len_bytes - 1) // 6):
+        # measurement = struct.unpack('HHH', buffer[1+i*measurement_len])
+        measurement = struct.unpack_from('HHH', buffer, 1+i*6)
         print(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
         writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
         file.flush()
+    print("----------\n")
     
 def notification_handler(sender, data):
     # print(f"Notification from {sender}: {data.hex()}")
@@ -119,23 +115,23 @@ async def main():
             return
 
         # Kirjoitetaan csv tiedostolle otsikot
-        if measurement_len == 8:
-            writer.writerows([["suunta", "x", "y", "z"]])
-        elif measurement_len == 6:
-            writer.writerows([["x", "y", "z"]])
+        writer.writerows([["x", "y", "z"]])
 
         # Tilataan notifikaatiot ja odotetaan ikuisuus (.Future), kunnes tulee KeyboardInterrupt
         try:
             await client.start_notify(uuid, notification_handler)
             print("Notifications enabled. Press Ctrl+C to quit.")
-            await asyncio.Future()
+            await stop_event.wait()
         finally:
             print("Stopping notifications...")
             await client.stop_notify(uuid)
+            file.close()
 
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
+    print("Interrupted")
+finally:
     # Suljetaan csv tiedosto
     file.close()
     print("Exiting...")

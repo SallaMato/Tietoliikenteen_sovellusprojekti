@@ -164,7 +164,7 @@ void send_data_thread(void)
 				
 				//Laitetaan suunta paketin ensimmäiseksi tavuksi
                 ble_payload[0] = suunta;
-
+				
 				// Kopioidaan ADC-data (120 int16_t arvoa = 240 tavua) suunnan perään.
                 // msg.buffer sisältää datan.
                 memcpy(&ble_payload[1], msg.buffer, 240);
