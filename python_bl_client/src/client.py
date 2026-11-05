@@ -90,7 +90,6 @@ def process_data(buffer):
     suunta = buffer[0]
     print(f"----- Packet {packet_count} -----")
     for i in range ((packet_data_len_bytes - 1) // 6):
-        # measurement = struct.unpack('HHH', buffer[1+i*measurement_len])
         measurement = struct.unpack_from('HHH', buffer, 1+i*6)
         print(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
         writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
