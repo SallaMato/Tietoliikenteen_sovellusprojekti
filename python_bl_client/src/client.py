@@ -38,6 +38,7 @@ Esimerkki ohjelman ajamisesta:
 
 import sys
 import os
+import numpy as np
 import struct
 import csv
 import asyncio
