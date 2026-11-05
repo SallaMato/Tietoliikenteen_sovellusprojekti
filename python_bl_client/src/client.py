@@ -42,7 +42,6 @@ import struct
 import csv
 import asyncio
 from bleak import BleakClient
-
 from dotenv import load_dotenv
 
 # Ladataan ympäristömuuttujat .env tiedostosta.
