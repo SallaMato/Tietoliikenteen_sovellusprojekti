@@ -144,11 +144,21 @@ int my_lbs_send_button_state_indicate(bool button_state)
 }
 
 /* STEP 14 - Define the function to send notifications for the MYSENSOR characteristic */
-int my_lbs_send_sensor_notify(struct Measurement sensor_value)
+/*int my_lbs_send_sensor_notify(struct Measurement sensor_value)
 {
 	if (!notify_mysensor_enabled) {
 		return -EACCES;
 	}
 
 	return bt_gatt_notify(NULL, &my_lbs_svc.attrs[7], &sensor_value, sizeof(sensor_value));
+}*/
+
+int my_lbs_send_payload(uint8_t *data, uint16_t length)
+{
+    
+    if (!notify_mysensor_enabled) {
+        return -ENOTCONN;
+    }
+
+    return bt_gatt_notify(NULL, &my_lbs_svc.attrs[7], data, length);
 }

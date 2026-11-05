@@ -105,7 +105,10 @@ int my_lbs_send_button_state_notify(bool button_state);
  * @retval 0 If the operation was successful.
  *           Otherwise, a (negative) error code is returned.
  */
-int my_lbs_send_sensor_notify(struct Measurement sensor_value);
+//int my_lbs_send_sensor_notify(struct Measurement sensor_value);
+
+// Uusi lähetysfunktio, joka ottaa vastaan tavutaulukon ja sen pituuden
+int my_lbs_send_payload(uint8_t *data, uint16_t length);
 
 int my_lbs_send_suunta_notify(uint32_t suunta_value);
 

@@ -29,7 +29,8 @@ LOG_MODULE_REGISTER(FastADC, LOG_LEVEL_INF);
 // --> laitteisto täyttää puskuria 0, ja kun se on täynnä, tapahtuu NRFX_SAADC_EVT_DONE - keskeytys, ja laitteisto alkaa automaattisesti
 //täyttämään puskuria 1. Keskeytyksen aikana voidaan lähettää puskurin 0 data eteenpäin.
 // Asetetaan puskurin kooksi 300 (100 näytettä * 3)
-#define SAADC_BUFFER_SIZE   300
+// 5.11 muutettu paketin kooksi 120 (40 näytettä * 3) koska 120 arvoa * 2 (uint16) = 240 tavua -> tämä mahtuu BLE paketti rajaan
+#define SAADC_BUFFER_SIZE   120
 
 // Luodaan Message Queue.
 // Määritellään jono 'fast_adc_msgq' joka ottaa vastan 'struct fast_adc_msg' tyyppisiä viestejä.

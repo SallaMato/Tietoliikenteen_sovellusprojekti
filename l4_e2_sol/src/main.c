@@ -14,6 +14,8 @@
 #include "my_lbs.h"
 //#include "adc.h"
 #include "fast_adc.h"
+//muistikopiointia varten (memcpy)
+#include <string.h>
 
 extern struct k_msgq fast_adc_msgq;
 
@@ -142,6 +144,10 @@ void send_data_thread(void)
 	
 	struct fast_adc_msg msg; //Muuttuja, johon tallennetaan viestijonosta luettu viesti (struct fast_adc_msg)
 
+	//Luodaan BLE-paketti (1 tavu suunta + 240 tavua dataa = 241 tavua)
+
+    uint8_t ble_payload[241];
+	
 	while (1) {
 
 		// k_msgq_get pysäyttää tämän säikeen (se menee nukkumaan) K_FOREVER-ajaksi,
@@ -153,8 +159,18 @@ void send_data_thread(void)
 
 			if (should_collect_data) {
 
-				printk("Ensimmäinen näyte: X:%d Y:%d Z:%d\n", 
-                       msg.buffer[0], msg.buffer[1], msg.buffer[2]);
+				printk("Paketti saatu. Suunta: %d,Ensimmäinen näyte: X:%d Y:%d Z:%d\n", 
+                     suunta, msg.buffer[0], msg.buffer[1], msg.buffer[2]);
+				
+				//Laitetaan suunta paketin ensimmäiseksi tavuksi
+                ble_payload[0] = suunta;
+
+				// Kopioidaan ADC-data (120 int16_t arvoa = 240 tavua) suunnan perään.
+                // msg.buffer sisältää datan.
+                memcpy(&ble_payload[1], msg.buffer, 240);
+
+				//Lähetetään 241 tavun paketti BLE yli
+                my_lbs_send_payload(ble_payload, sizeof(ble_payload));
 			}
 		}
 	}
