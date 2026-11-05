@@ -73,7 +73,7 @@ def process_data1(data):
     print(f"x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
 
     # Kirjoitetaan arvot csv tiedostoon. flush = pakottaa kirjoitetut arvot tallentumaan levylle asti heti
-    # TODO: Kannattaako flushia tehdä joka arvon kohdalla? Pitäisikö tehdä batcheittain???? Ehkä 1s (16k näytettä) jälkeen??
+    # TODO: Kannattaako flushia tehdä joka arvon kohdalla? Pitäisikö tehdä batcheittain????
     writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
     file.flush()
     
@@ -83,7 +83,7 @@ def process_data2(data):
     print(f"Suunta: {measurement[0]}, x: {measurement[1]}, y: {measurement[2]}, z: {measurement[3]}")
 
     # Kirjoitetaan arvot csv tiedostoon. flush = pakottaa kirjoitetut arvot tallentumaan levylle asti heti
-    # TODO: Kannattaako flushia tehdä joka arvon kohdalla? Pitäisikö tehdä batcheittain???? Ehkä 1s (16k näytettä) jälkeen??
+    # TODO: Kannattaako flushia tehdä joka arvon kohdalla? Pitäisikö tehdä batcheittain????
     writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2]), str(measurement[3])]])
     file.flush()
 
