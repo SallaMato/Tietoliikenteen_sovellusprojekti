@@ -2,17 +2,17 @@
 Ohjelma skannaa BLE laitteita ja tulostaa niiden nimen ja osoitteen.
 
 Alustus (tarvitsee tehdä vain kerran):
-1: Kannattaa ensin tehdä python environment komennolla:
-   python -m venv /path/to/new/virtual/environment   <-- muokkaa tiedostopolku osoittamaan "python_bl_client" -kansioon
+1: Kannattaa ensin tehdä "python_bl_client" kansiossa python environment komennolla:
+   python -m venv .venv
 
-2: Aiempi komento luo "Scripts" kansion. Aja komentokehotteella "Scripts" kansiossa "activate.bat" -komento.
+2: Aiempi komento luo ".venv/Scripts" kansion. Aja sieltä "activate.bat" -komento.
    Tämä aktivoi python environmentin. Tiedät että olet environmentissa kun komentokehotteeseen tulee
-   "(python_bl_client)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
+   "(.venv)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
    environmentille paikallisesti.
   
 3: Kokeile ajaa "scanner.py". Todennäköisesti saat virheen "ModuleNotFoundError: No module named 'bleak'".
    Voit asentaa sen "pip install bleak" -komennolla. Toista sama mahdollisten muiden puuttuvien moduuleiden
-   kohdalla. 
+   kohdalla.
 
 Esimerkki ohjelman ajamisesta:
 1: Varmista että olet aktivoinut environmentin, eli aja komento "Scripts/activate.bat".

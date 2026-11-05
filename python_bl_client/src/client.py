@@ -38,9 +38,11 @@ Esimerkki ohjelman ajamisesta:
    characteristiceista. Kopioi haluttu UUID ja aja ohjelma osoitteen ja UUID:n kanssa uudestaan.
 '''
 
+from nt import rename
 import os
 import struct
 import csv
+import time
 import asyncio
 from bleak import BleakClient
 from dotenv import load_dotenv
@@ -49,7 +51,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Avataan valmiiksi csv tiedosto, jotta kirjoittaminen olisi (toivottavasti) nopeampaa.
-file = open('data.csv', 'w', newline='')
+os.makedirs("../data/temp", exist_ok=True)
+file = open('../data/temp/data.csv', 'w', newline='')
 writer = csv.writer(file)
 
 # Haetaan .env tiedostosta muuttujat.
@@ -58,10 +61,21 @@ uuid = os.getenv("CHARACTERISTIC_UUID")
 packet_data_len_bytes = int(os.getenv("PACKET_DATA_LEN_BYTES"))
 timer_seconds = int(os.getenv("TIMER_SECONDS"))
 
+label0 =  os.getenv("LABEL_0")
+label1 =  os.getenv("LABEL_1")
+label2 =  os.getenv("LABEL_2")
+label3 =  os.getenv("LABEL_3")
+label4 =  os.getenv("LABEL_4")
+label5 =  os.getenv("LABEL_5")
+
+# Map suunta --> label
+labels = {"0": label0, "1": label1, "2": label2, "3": label3, "4": label4, "5": label5}
+
 stop_event = asyncio.Event()
 packet_count = 0
 shutdown_requested = False
 timer_started = False
+suunta = None
 
 def request_shutdown():
     global shutdown_requested
@@ -73,6 +87,7 @@ def process_data(buffer):
     global packet_count
     global shutdown_requested
     global timer_started
+    global suunta
     
     if shutdown_requested:
         return
@@ -121,6 +136,9 @@ async def main():
             await client.stop_notify(uuid)
             file.flush()
             file.close()
+            # Luodaan tiedosto lopullista sample tiedostoa varten
+            os.makedirs(f"../data/{suunta}", exist_ok=True)
+            os.rename("../data/temp/data.csv", f"../data/{suunta}/data_{suunta}_{timer_seconds}_{int(time.time())}.csv")
 
 try:
     asyncio.run(main())
