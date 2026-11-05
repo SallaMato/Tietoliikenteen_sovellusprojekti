@@ -6,6 +6,8 @@ char_uuid (argv[2]). Vastaanotettu data tallennetaan .csv tiedostoon.
 cmdline argumenttien sijaan voidaan myös käyttää ".env" -tiedostoa, jonne pitää laittaa muuttujat
 DEVICE_ADDR=""
 CHARACTERISTIC_UUID=""
+PACKET_DATA_LEN_BYTES="241"
+PACKETS_BEFORE_SHUTDOWN="10"
 
 HUOM! datan pitää olla joko 8 tavuinen byte array (suunta, x, y, z), tai 6 tavuinen byte array (x, y, z)
 
