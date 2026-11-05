@@ -5,17 +5,19 @@ Ohjelma käyttää ".env" -tiedostoa, jonne pitää laittaa muuttujat
 DEVICE_ADDR=""
 CHARACTERISTIC_UUID=""
 PACKET_DATA_LEN_BYTES="241"
-PACKETS_BEFORE_SHUTDOWN="10"
+TIMER_SECONDS="10"
 
-HUOM! datan pitää olla joko 8 tavuinen byte array (suunta, x, y, z), tai 6 tavuinen byte array (x, y, z)
+HUOM! Paketin rakenne täytyy olla:
+1. Tavu = Suunta
+Tämän jälkeen X, Y, Z arvot joista jokainen 16bit.
 
 Alustus (tarvitsee tehdä vain kerran):
-1: Kannattaa ensin tehdä python environment komennolla:
-   python -m venv /path/to/new/virtual/environment   <-- muokkaa tiedostopolku osoittamaan "python_bl_client" -kansioon
+1: Kannattaa ensin tehdä "python_bl_client" kansiossa python environment komennolla:
+   python -m venv .venv
 
-2: Aiempi komento luo "Scripts" kansion. Aja komentokehotteella "Scripts" kansiossa "activate.bat" -komento.
+2: Aiempi komento luo ".venv/Scripts" kansion. Aja sieltä "activate.bat" -komento.
    Tämä aktivoi python environmentin. Tiedät että olet environmentissa kun komentokehotteeseen tulee
-   "(python_bl_client)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
+   "(.venv)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
    environmentille paikallisesti.
   
 3: Kokeile ajaa "client.py". Todennäköisesti saat virheen "ModuleNotFoundError: No module named 'bleak'".
@@ -36,7 +38,6 @@ Esimerkki ohjelman ajamisesta:
    characteristiceista. Kopioi haluttu UUID ja aja ohjelma osoitteen ja UUID:n kanssa uudestaan.
 '''
 
-import sys
 import os
 import struct
 import csv
@@ -55,37 +56,43 @@ writer = csv.writer(file)
 addr = os.getenv("DEVICE_ADDR")
 uuid = os.getenv("CHARACTERISTIC_UUID")
 packet_data_len_bytes = int(os.getenv("PACKET_DATA_LEN_BYTES"))
-packets_before_shutdown = int(os.getenv("PACKETS_BEFORE_SHUTDOWN"))
+timer_seconds = int(os.getenv("TIMER_SECONDS"))
 
 stop_event = asyncio.Event()
 packet_count = 0
 shutdown_requested = False
+timer_started = False
+
+def request_shutdown():
+    global shutdown_requested
+    shutdown_requested = True
+    print(f"{timer_seconds}s elapsed. Stopping capture...")
+    stop_event.set()
 
 def process_data(buffer):
     global packet_count
     global shutdown_requested
+    global timer_started
     
     if shutdown_requested:
         return
-    
-    packet_count += 1
-    if packet_count == packets_before_shutdown:
-        shutdown_requested = True
-        stop_event.set()
-        
+
+    # Start timer when first packet arrives
+    if not timer_started:
+        timer_started = True
+        loop = asyncio.get_running_loop()
+        loop.call_later(timer_seconds, request_shutdown)
+
+    packet_count += 1     
     suunta = buffer[0]
     print(f"----- Packet {packet_count} -----")
     for i in range ((packet_data_len_bytes - 1) // 6):
         measurement = struct.unpack_from('HHH', buffer, 1+i*6)
-        print(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
         writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
-        file.flush()
+        print(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
     print("----------\n")
     
 def notification_handler(sender, data):
-    # print(f"Notification from {sender}: {data.hex()}")
-    # print("Data type:", type(data))
-    # print("Data len:", len(data))
     process_data(data)
 
 async def main():
@@ -104,14 +111,15 @@ async def main():
         # Kirjoitetaan csv tiedostolle otsikot
         writer.writerows([["x", "y", "z"]])
 
-       # Tilataan notifikaatiot ja odotetaan
+        # Tilataan notifikaatiot ja odotetaan
         try:
+            print(f"Starting notifications. Timer ({timer_seconds}s) will start after receiving first packet.")
             await client.start_notify(uuid, notification_handler)
-            print("Notifications enabled. Press Ctrl+C to quit.")
             await stop_event.wait()
         finally:
             print("Stopping notifications...")
             await client.stop_notify(uuid)
+            file.flush()
             file.close()
 
 try:
