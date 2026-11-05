@@ -38,6 +38,7 @@ Esimerkki ohjelman ajamisesta:
 
 import sys
 import os
+import numpy as np
 import struct
 import csv
 import asyncio
@@ -54,6 +55,9 @@ writer = csv.writer(file)
 # Haetaan .env tiedostosta muuttujat. Nämä voidaan ylikirjoittaa cmdline argumenteilla.
 addr = os.getenv("DEVICE_ADDR")
 uuid = os.getenv("CHARACTERISTIC_UUID")
+packet_data_len_bytes = int(os.getenv("PACKET_DATA_LEN_BYTES"))
+measurement_len = int(os.getenv("MEASUREMENT_LEN_BYTES"))
+
 
 # Prosessoidaan cmdline argumentit.
 if len(sys.argv) == 3:
@@ -87,19 +91,19 @@ def process_data2(data):
     writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2]), str(measurement[3])]])
     file.flush()
 
-# Tehdään funktiotable, jonka avaimena toimii vastaanotetun datan tavumäärä.
-# Jos tavumäärä = 6, kutsutaan process_data1 funktiota, jos tavumäärä = 8, kutsutaan process_data2 funktiota.
-# Esim. process_data[8](data) kutsuu process_data2 funktiota.
-process_data = {6: process_data1, 8: process_data2}
+def process_data(buffer):
+    suunta = struct.unpack('H', buffer)
+    for i in range ((packet_data_len_bytes - 1)//measurement_len):
+        measurement = struct.unpack('HHH', buffer[1+i*measurement_len])
+        print(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
+        writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
+        file.flush()
     
 def notification_handler(sender, data):
     # print(f"Notification from {sender}: {data.hex()}")
     # print("Data type:", type(data))
     # print("Data len:", len(data))
-    try:
-        process_data[len(data)](data)
-    except KeyError:
-        print(f"Unknown packet length: {len(data)}")
+    process_data(data)
 
 async def main():
     async with BleakClient(addr) as client:
@@ -115,7 +119,10 @@ async def main():
             return
 
         # Kirjoitetaan csv tiedostolle otsikot
-        writer.writerows([["suunta", "x", "y", "z"]])
+        if measurement_len == 8:
+            writer.writerows([["suunta", "x", "y", "z"]])
+        elif measurement_len == 6:
+            writer.writerows([["x", "y", "z"]])
 
         # Tilataan notifikaatiot ja odotetaan ikuisuus (.Future), kunnes tulee KeyboardInterrupt
         try:
