@@ -1,9 +1,7 @@
 '''
-Ohjelma yhdistää bluetooth laitteeseen jonka osoite on
-addr (argv[1]) ja tilaa characteristicin jonka uuid on
-char_uuid (argv[2]). Vastaanotettu data tallennetaan .csv tiedostoon.
+Ohjelma yhdistää bluetooth laitteeseen. 
 
-cmdline argumenttien sijaan voidaan myös käyttää ".env" -tiedostoa, jonne pitää laittaa muuttujat
+Ohjelma käyttää ".env" -tiedostoa, jonne pitää laittaa muuttujat
 DEVICE_ADDR=""
 CHARACTERISTIC_UUID=""
 PACKET_DATA_LEN_BYTES="241"
@@ -53,7 +51,7 @@ load_dotenv()
 file = open('data.csv', 'w', newline='')
 writer = csv.writer(file)
 
-# Haetaan .env tiedostosta muuttujat. Nämä voidaan ylikirjoittaa cmdline argumenteilla.
+# Haetaan .env tiedostosta muuttujat.
 addr = os.getenv("DEVICE_ADDR")
 uuid = os.getenv("CHARACTERISTIC_UUID")
 packet_data_len_bytes = int(os.getenv("PACKET_DATA_LEN_BYTES"))
@@ -62,18 +60,6 @@ packets_before_shutdown = int(os.getenv("PACKETS_BEFORE_SHUTDOWN"))
 stop_event = asyncio.Event()
 packet_count = 0
 shutdown_requested = False
-
-# Prosessoidaan cmdline argumentit.
-if len(sys.argv) == 3:
-    addr = sys.argv[1]
-    uuid = sys.argv[2]
-elif len(sys.argv) == 2:
-    addr = sys.argv[1]
-    uuid = ""
-elif addr is None or addr == "":
-    print("Usage: client.py <address> [OPTIONAL]: <uuid>")
-    print("Alternative: use a .env file with DEVICE_ADDR and CHARACTERISTIC_UUID variables")
-    exit(1)
 
 def process_data(buffer):
     global packet_count
@@ -86,7 +72,7 @@ def process_data(buffer):
     if packet_count == packets_before_shutdown:
         shutdown_requested = True
         stop_event.set()
-    
+        
     suunta = buffer[0]
     print(f"----- Packet {packet_count} -----")
     for i in range ((packet_data_len_bytes - 1) // 6):
@@ -118,7 +104,7 @@ async def main():
         # Kirjoitetaan csv tiedostolle otsikot
         writer.writerows([["x", "y", "z"]])
 
-        # Tilataan notifikaatiot ja odotetaan ikuisuus (.Future), kunnes tulee KeyboardInterrupt
+       # Tilataan notifikaatiot ja odotetaan
         try:
             await client.start_notify(uuid, notification_handler)
             print("Notifications enabled. Press Ctrl+C to quit.")
