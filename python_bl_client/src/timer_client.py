@@ -1,41 +1,8 @@
 '''
-Ohjelma yhdistää bluetooth laitteeseen. 
-
-Ohjelma käyttää ".env" -tiedostoa, jonne pitää laittaa muuttujat
-DEVICE_ADDR=""
-CHARACTERISTIC_UUID=""
-PACKET_DATA_LEN_BYTES="241"
-TIMER_SECONDS="10"
-
-HUOM! Paketin rakenne täytyy olla:
-1. Tavu = Suunta
-Tämän jälkeen X, Y, Z arvot joista jokainen 16bit.
-
-Alustus (tarvitsee tehdä vain kerran):
-1: Kannattaa ensin tehdä "python_bl_client" kansiossa python environment komennolla:
-   python -m venv .venv
-
-2: Aiempi komento luo ".venv/Scripts" kansion. Aja sieltä "activate.bat" -komento.
-   Tämä aktivoi python environmentin. Tiedät että olet environmentissa kun komentokehotteeseen tulee
-   "(.venv)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
-   environmentille paikallisesti.
-  
-3: Kokeile ajaa "client.py". Todennäköisesti saat virheen "ModuleNotFoundError: No module named 'bleak'".
-   Voit asentaa sen "pip install bleak" -komennolla. Toista sama mahdollisten muiden puuttuvien moduuleiden
-   kohdalla.
-
-Esimerkki ohjelman ajamisesta:
-1: Varmista että olet aktivoinut environmentin, eli aja komento "Scripts/activate.bat".
-
-2: Aja komento "python client.py <laitteen osoite> <UUID>
-   Esim: python client.py "DE:8D:ED:BD:1A:D0" "00001526-1212-efde-1523-785feabcd123"
-
-   Jos et tiedä laitteen osoitetta, aja scanner.py scripti. Se skannaa laitteita
-   ja printtaa listan niistä. Etsi oma laite listasta, näet listassa laitteen osoitteen.
-   Voit tämän jälkeen ajaa client.py scriptin uudestaan osoitteellasi.
-
-   Jos et tiedä characteristic UUID numeroa, client.py printtaa listan kaikista
-   characteristiceista. Kopioi haluttu UUID ja aja ohjelma osoitteen ja UUID:n kanssa uudestaan.
+Ohjelma yhdistää bluetooth laitteeseen, tilaa kiihtyvyysanturidata notifikaatiot,
+ja tallentaa samplet tiedostoihin. Ohjelma tallentaa sampleja kunnes TIMER_SECONDS aika 
+on saavutettu. Ohjelma rakentaa "data" alikansion "python_bl_client" kansioon, jonne se tekee omat kansiot jokaiselle
+suunnalle. 
 '''
 
 from nt import rename
@@ -138,7 +105,7 @@ async def main():
             file.close()
             # Luodaan tiedosto lopullista sample tiedostoa varten
             os.makedirs(f"../data/{suunta}", exist_ok=True)
-            os.rename("../data/temp/data.csv", f"../data/{suunta}/data_{suunta}_{timer_seconds}_{int(time.time())}.csv")
+            os.rename("../data/temp/data.csv", f"../data/{suunta}/data_{suunta}_T{timer_seconds}_{int(time.time())}.csv")
 
 try:
     asyncio.run(main())

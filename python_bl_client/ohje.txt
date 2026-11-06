@@ -1,0 +1,49 @@
+Ohjelmat käyttävät ".env" -tiedostoa, jonne pitää laittaa muuttujat:
+DEVICE_ADDR=""
+CHARACTERISTIC_UUID=""
+
+PACKET_DATA_LEN_BYTES="241"
+TIMER_SECONDS="10"
+MAX_SAMPLE_COUNT="128"
+
+LABEL_0="0"
+LABEL_1="1"
+LABEL_2="2"
+LABEL_3="3"
+LABEL_4="4"
+LABEL_5="5"
+
+HUOM! Paketin rakenne täytyy olla:
+1. Tavu = Suunta
+Tämän jälkeen X, Y, Z arvot joista jokainen 16bit.
+
+Suunnat ovat mapattu .env tiedostossa oleviin labeleihin:
+suunta         label
+0              LABEL_0
+1              LABEL_1
+2              LABEL_2
+3              LABEL_3
+4              LABEL_4
+5              LABEL_5
+
+Alustus (tarvitsee tehdä vain kerran):
+1: Kannattaa ensin tehdä "python_bl_client" kansiossa python environment komennolla:
+   python -m venv .venv
+
+2: Aiempi komento luo ".venv/Scripts" kansion. Aja sieltä "activate.bat" -komento.
+   Tämä aktivoi python environmentin. Tiedät että olet environmentissa kun komentokehotteeseen tulee
+   "(.venv)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
+   environmentille paikallisesti.
+  
+3: Kokeile ajaa jokin ohjelmista ("sample_client.py", "timer_client.py"). Todennäköisesti saat virheen
+   "ModuleNotFoundError: No module named 'bleak'". Voit asentaa sen "pip install bleak" -komennolla.
+   Toista sama mahdollisten muiden puuttuvien moduuleiden kohdalla.
+
+VINKKEJÄ:
+   Jos et tiedä laitteen osoitetta, aja scanner.py scripti. Se skannaa laitteita
+   ja printtaa listan niistä. Etsi oma laite listasta, näet listassa laitteen osoitteen.
+   Voit tämän jälkeen lisätä osoitteen .env tiedostoon.
+
+   Jos et tiedä characteristic UUID numeroa, "timer_client.py" ja "sample_client.py" printtaa listan kaikista
+   characteristiceista. Kopioi haluttu UUID .env tiedostoon ja aja ohjelma uudestaan.
+'''
