@@ -12,7 +12,12 @@
 #include <zephyr/bluetooth/conn.h>
 #include <dk_buttons_and_leds.h>
 #include "my_lbs.h"
-#include "adc.h"
+//#include "adc.h"
+#include "fast_adc.h"
+//muistikopiointia varten (memcpy)
+#include <string.h>
+
+extern struct k_msgq fast_adc_msgq;
 
 static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
 	(BT_LE_ADV_OPT_CONN |
@@ -90,7 +95,7 @@ static bool app_button_cb(void)
 {
 	return app_button_state;
 }
-void collect_data_thread(void)
+/*void collect_data_thread(void)
 {
 	printk("Data collection thread started\n");
 	while(1) {
@@ -114,21 +119,19 @@ void collect_data_thread(void)
 		}
 		k_sleep(K_MSEC(100)); // Sleep for a short time to avoid busy waiting
 	}
-}
+}*/
 /* STEP 18.1 - Define the thread function  */
 void send_data_thread(void)
 {
-	while (1) {
-		/*struct Measurement m = readADCValue();
+	/*while (1) {
+		//struct Measurement m = readADCValue();
 
 		// Sending known values for debugging
-		m.suunta = suunta;
-		m.x = 1;
-		m.y = 12348;
-		m.z = 3;
-		*/
-
-		/* Send notification, the function sends notifications only if a client is subscribed */
+		//m.suunta = suunta;
+		//m.x = 1;
+		//m.y = 12348;
+		//m.z = 3;
+		
 		if (should_send_data) {
 			for (int i = 0; i < MAX_MEASUREMENTS; i++) {
 				my_lbs_send_sensor_notify(collected_data[i]);
@@ -137,6 +140,39 @@ void send_data_thread(void)
 			should_send_data = false;
 		}
 		k_sleep(K_MSEC(100)); // Sleep for a short time to avoid busy waiting
+	}*/
+	
+	struct fast_adc_msg msg; //Muuttuja, johon tallennetaan viestijonosta luettu viesti (struct fast_adc_msg)
+
+	//Luodaan BLE-paketti (1 tavu suunta + 240 tavua dataa = 241 tavua)
+
+    uint8_t ble_payload[241];
+	
+	while (1) {
+
+		// k_msgq_get pysäyttää tämän säikeen (se menee nukkumaan) K_FOREVER-ajaksi,
+		// kunnes viestijonossa on viesti fast_adc.c:stä.
+		// Kun viesti tulee, se tallentuu 'msg' muuttujaan.
+		if (k_msgq_get(&fast_adc_msgq, &msg, K_FOREVER) == 0) {
+
+			//Nyt data on kerätty. msg.buffer on taulukko (X, Y,Z, X, Y,Z..) ja msg.size on 300.
+
+			if (should_collect_data) {
+
+				printk("Paketti saatu. Suunta: %d,Ensimmäinen näyte: X:%d Y:%d Z:%d\n", 
+                     suunta, msg.buffer[0], msg.buffer[1], msg.buffer[2]);
+				
+				//Laitetaan suunta paketin ensimmäiseksi tavuksi
+                ble_payload[0] = suunta;
+				
+				// Kopioidaan ADC-data (120 int16_t arvoa = 240 tavua) suunnan perään.
+                // msg.buffer sisältää datan.
+                memcpy(&ble_payload[1], msg.buffer, 240);
+
+				//Lähetetään 241 tavun paketti BLE yli
+                my_lbs_send_payload(ble_payload, sizeof(ble_payload));
+			}
+		}
 	}
 }
 
@@ -241,11 +277,14 @@ int main(void)
 	k_work_init(&adv_work, adv_work_handler);
 	advertising_start();
 
-	if(initializeADC() != 0)
+	/*if(initializeADC() != 0)
 	{
 		printk("ADC initialization failed!");
 		return -1;
-	}
+	}*/
+
+	// Käynnistetään nopea ADC
+	fast_adc_init_and_start();
 
 	for (;;) {
 		//struct Measurement m = readADCValue();
@@ -258,4 +297,4 @@ int main(void)
 }
 /* STEP 18.2 - Define and initialize a thread to send data periodically */
 K_THREAD_DEFINE(send_data_thread_id, STACKSIZE, send_data_thread, NULL, NULL, NULL, PRIORITY, 0, 0);
-K_THREAD_DEFINE(collect_data_thread_id, STACKSIZE, collect_data_thread, NULL, NULL, NULL, PRIORITY, 0, 0);
+//K_THREAD_DEFINE(collect_data_thread_id, STACKSIZE, collect_data_thread, NULL, NULL, NULL, PRIORITY, 0, 0);
