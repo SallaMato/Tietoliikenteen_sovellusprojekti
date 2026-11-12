@@ -1,3 +1,14 @@
+'''
+Ohjelma yhdistää bluetooth laitteeseen, tilaa kiihtyvyysanturidata notifikaatiot,
+ja tallentaa samplet mySQL tietokantaan. Ohjelma tallentaa sampleja kunnes MAX_SAMPLE_COUNT
+on saavutettu.
+
+HUOM! Testattu: nordic lähettää dataa -->  prosessoidaan 10 samplea ja kirjoitetaan paikalliseen tietokantaan
+      EI vielä testattu raspberryn kanssa, eikä ubuntu tietokantojen kanssa, ainoastaan läppärillä paikalliseen tietokantaan.
+
+TODO: Kirjoita data tietokantaan isommissa batcheissa.
+'''
+
 import os
 import struct
 import asyncio
@@ -9,7 +20,7 @@ from mysql.connector.aio import connect
 load_dotenv()
 
 # Haetaan .env tiedostosta muuttujat.
-addr = os.getenv("DEVICE_ADDR")
+device_addr = os.getenv("DEVICE_ADDR")
 uuid = os.getenv("CHARACTERISTIC_UUID")
 packet_data_len_bytes = int(os.getenv("PACKET_DATA_LEN_BYTES"))
 max_sample_count = int(os.getenv("MAX_SAMPLE_COUNT"))
@@ -24,7 +35,11 @@ mysql_db_name = os.getenv("MYSQL_DB_NAME")
 stop_event = asyncio.Event()
 
 # Jono, johon BLE paketit laitetaan prosessoitavaksi
-queue = asyncio.Queue()
+queue_max_size = 1000
+queue = asyncio.Queue(maxsize=queue_max_size)
+
+# Tällä lukolla varmistetaan, että sample_count muuttujaa lukee yksi säie kerrallaan
+sample_count_lock = asyncio.Lock()
 
 # Säikeiden lukumäärä, jotka prosessoivat datan kirjoitusta SQL tietokantaan
 num_worker_threads = 3
@@ -35,7 +50,6 @@ worker_threads = []
 packet_count = 0
 sample_count = 0
 shutdown_requested = False
-suunta = None
 
 # MySQL yhteyden asetukset
 config = {
@@ -43,6 +57,7 @@ config = {
     "port": mysql_port,
     "user": mysql_user,
     "password": mysql_pass,
+    "database": mysql_db_name,
     "use_pure": True,
     "autocommit": False
 }
@@ -54,7 +69,7 @@ def request_shutdown():
 
     
 # -------------------
-# SQL PROSESSOINTI
+# SQL
 # -------------------
 async def insert_into_rawdata(groupid, from_mac, to_mac,
                                sensorvalue_a, sensorvalue_b,
@@ -62,7 +77,7 @@ async def insert_into_rawdata(groupid, from_mac, to_mac,
                                sensorvalue_e, sensorvalue_f,
                                cnx, cur):
     stmt = """
-    INSERT INTO measurements.rawdata (
+    INSERT INTO rawdata (
         groupid,
         from_mac,
         to_mac,
@@ -90,100 +105,130 @@ async def insert_into_rawdata(groupid, from_mac, to_mac,
         )
     )
 
+# Estetään mahdollinen race condition ja lisätään sample_count muuttujaan 1
+async def increment_sample_count() -> bool:
+    global sample_count
+    async with sample_count_lock:
+        if sample_count >= max_sample_count:
+            return False
+        sample_count += 1
+        return True
+
 async def queue_handler(thread_id, queue, cnx, cur):
-    print(f"running thread {thread_id}")
+    print(f"worker {thread_id} started")
     global packet_count
     global sample_count
     global shutdown_requested
-    global suunta
+    global device_addr
+    global sample_count_lock
     
     while True:
         # Hae queuessa olevan objektin parametrit (ne jotka annoimme kun kutsuimme queue.put funktiota)
-        sender, buffer = await queue.get()
-        print("sender:", sender)
-        print("buffer:", buffer)
+        buffer = await queue.get()
 
-        packet_count += 1
+        try:
+            # Tätä ei käytetä tällä hetkellä mihinkän hyödylliseen, joten ei tarvitse suojata lockilla.
+            packet_count += 1
 
-        # Jokaisen BLE paketin ensimmäinen tavu sisältää suunnan
-        suunta = buffer[0]
+            # Jokaisen BLE paketin ensimmäinen tavu sisältää suunnan
+            suunta = buffer[0]
 
-        for i in range ((packet_data_len_bytes - 1) // 6):
-            if sample_count < max_sample_count:
-                measurement = struct.unpack_from('HHH', buffer, 1+i*6)
+            for i in range ((packet_data_len_bytes - 1) // 6):
+                if not await increment_sample_count():
+                    request_shutdown()
+                    break
+
+                measurement = struct.unpack_from('<HHH', buffer, 1+i*6)
+                print(f"[sql]: device: {device_addr}, suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
+
+                # TODO: Placeholder table, pitää muokata omaan käyttöön sopivaksi
                 res = await insert_into_rawdata(
-                    "666",
-                    "AA:BB:CC:DD:EE:FF",
-                    "11:22:33:44:55:66",
-                    str(measurement[0]),
-                    str(measurement[1]),
-                    str(measurement[2]),
                     "0",
-                    "0",
+                    device_addr,
+                    "11:22:33:44:55:66", # Tähän pitäisi jotenkin saada tämän laitteen BLE osoite....miten?? TODO: ota selvää
+                    measurement[0],
+                    measurement[1],
+                    measurement[2],
+                    0,
+                    0,
                     "testi_data_sensori",
                     cnx, cur)
 
-            sample_count += 1
-            if sample_count == max_sample_count:
-                request_shutdown()
-                
-        await cnx.commit()
-
-        # Kerrotaan queuelle, että taski on valmis
-        queue.task_done()
+            # Kirjoitetaan rivit databaseen
+            await cnx.commit()
+            
+        except Exception:
+            # Virheen sattuessa rollback ja keskeytetään
+            await cnx.rollback()
+            raise
+        finally:
+            # Kerrotaan queuelle, että taski on valmis
+            queue.task_done()
 
 async def job_mysql():
+    cnxs = []
+    curs = []
     try:
         # Avataan niin monta SQL yhteyttä kuin meillä on säikeitä
-        aws = [connect(**config) for _ in range(num_worker_threads)]
-        cnxs = [await coro for coro in asyncio.as_completed(aws)]
-        
-        aws = [cnx.cursor() for cnx in cnxs]
-        curs = [await coro for coro in asyncio.as_completed(aws)]
+        cnxs = await asyncio.gather(*[connect(**config) for _ in range(num_worker_threads)])
+        curs = await asyncio.gather(*[cnx.cursor() for cnx in cnxs])
 
         for i in range(num_worker_threads):
-            # Create worker  threads to handle the queue
+            # Luodaan säikeitä queuen käsittelyä varten
             worker_thread = asyncio.create_task(queue_handler(i, queue, cnxs[i], curs[i]))
             worker_threads.append(worker_thread)
 
-        # Wait for the stop event before releasing mysql and queue resources
+        # Odotetaan stop signaalia, ennen SQL resurssien vapauttamista
         await stop_event.wait()
 
     finally:
-        # Wait until the queue is fully processed.
+        # Odotetaan kunnes queue on kokonaan prosessoitu
         await queue.join()
 
-        # Cancel worker threads
+        # Pysäytetään säikeet
         for i in range(len(worker_threads)):
-            print(f"Cancelling thread {i}")
+            print(f"[sql]: Cancelling thread {i}")
             worker_threads[i].cancel()
         
-        # Wait until all worker tasks are cancelled.
+        # Odotetaan kunnes säikeet ovat pysähtyneet
         await asyncio.gather(*worker_threads, return_exceptions=True)
 
+        # Suljetaan SQL yhteydet
+        for cur in curs:
+            await cur.close()
+        for cnx in cnxs:
+            await cnx.close()
+
 # -------------------
-# BLE PROCESSING
+# BLE
 # -------------------
-def notification_handler(sender, data):
+async def notification_handler(sender, data):
     if shutdown_requested:
         return
 
-    # Post work to the queue, will block if queue is full. NOTE: put_nowait would not block, but is it safe??
-    queue.put((sender, data))
+    if len(data) != packet_data_len_bytes:
+        print("Unexpected packet size")
+        return
+
+    # Lähetä paketit käsiteltäväksi queueen. Jos jono täysi, tiputa paketti
+    try:
+        queue.put_nowait(data)
+    except asyncio.QueueFull:
+        print("Queue full! Packet dropped.")
     
 async def job_ble():
     # TEST: Rakennetaan dummy BLE paketteja ja lähetetään queuelle
-    
+    '''
     global packet_data_len_bytes
     packet_data_len_bytes = 9
     for i in range(10):
         test_data = struct.pack('<BHHH', 1, 2000, 3000, 4000)
         await queue.put((f"lahettaja_{i}", test_data))
     return
-    
+    '''
     #  TESTI LOPPU
     
-    async with BleakClient(addr) as client:
+    async with BleakClient(device_addr) as client:
         # Hakee kaikki laitteen servicet ja characteristicit ja tulostaa ne.
         for service in client.services:
             print(f"[ble]:Service: {service.uuid}")
