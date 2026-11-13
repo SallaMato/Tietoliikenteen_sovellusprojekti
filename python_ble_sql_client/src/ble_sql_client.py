@@ -151,7 +151,7 @@ async def queue_handler(thread_id, queue, cnx, cur):
                     measurement[2],
                     0,
                     0,
-                    "testi_data_sensori",
+                    suunta,
                     cnx, cur)
 
             # Kirjoitetaan rivit databaseen
