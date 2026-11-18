@@ -143,7 +143,7 @@ async def queue_handler(thread_id, queue, cnx, cur):
 
                 # TODO: Placeholder table, pitää muokata omaan käyttöön sopivaksi
                 res = await insert_into_rawdata(
-                    "0",
+                    "4",
                     device_addr,
                     "11:22:33:44:55:66", # Tähän pitäisi jotenkin saada tämän laitteen BLE osoite....miten?? TODO: ota selvää
                     measurement[0],
