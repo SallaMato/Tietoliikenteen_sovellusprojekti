@@ -12,9 +12,13 @@ TODO: Kirjoita data tietokantaan isommissa batcheissa.
 import os
 import struct
 import asyncio
+import logging
 from bleak import BleakClient
 from dotenv import load_dotenv
 from mysql.connector.aio import connect
+
+# Logging. Kehitysvaiheessa DEBUG, lopuksi vaihdetaan ERROR
+logging.basicConfig(level=logging.DEBUG)
 
 # Ladataan ympäristömuuttujat .env tiedostosta.
 load_dotenv()
@@ -115,7 +119,7 @@ async def increment_sample_count() -> bool:
         return True
 
 async def queue_handler(thread_id, queue, cnx, cur):
-    print(f"worker {thread_id} started")
+    logging.debug(f"worker {thread_id} started")
     global packet_count
     global sample_count
     global shutdown_requested
@@ -139,7 +143,7 @@ async def queue_handler(thread_id, queue, cnx, cur):
                     break
 
                 measurement = struct.unpack_from('<HHH', buffer, 1+i*6)
-                print(f"[sql]: device: {device_addr}, suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
+                logging.debug(f"[sql]: device: {device_addr}, suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
 
                 # TODO: Placeholder table, pitää muokata omaan käyttöön sopivaksi
                 res = await insert_into_rawdata(
@@ -187,7 +191,7 @@ async def job_mysql():
 
         # Pysäytetään säikeet
         for i in range(len(worker_threads)):
-            print(f"[sql]: Cancelling thread {i}")
+            logging.info(f"[sql]: Cancelling thread {i}")
             worker_threads[i].cancel()
         
         # Odotetaan kunnes säikeet ovat pysähtyneet
@@ -207,14 +211,14 @@ async def notification_handler(sender, data):
         return
 
     if len(data) != packet_data_len_bytes:
-        print("Unexpected packet size")
+        logging.warning("Unexpected packet size")
         return
 
     # Lähetä paketit käsiteltäväksi queueen. Jos jono täysi, tiputa paketti
     try:
         queue.put_nowait(data)
     except asyncio.QueueFull:
-        print("Queue full! Packet dropped.")
+        logging.warning("Queue full! Packet dropped.")
     
 async def job_ble():
     # TEST: Rakennetaan dummy BLE paketteja ja lähetetään queuelle
@@ -231,22 +235,22 @@ async def job_ble():
     async with BleakClient(device_addr) as client:
         # Hakee kaikki laitteen servicet ja characteristicit ja tulostaa ne.
         for service in client.services:
-            print(f"[ble]:Service: {service.uuid}")
+            logging.debug(f"[ble]:Service: {service.uuid}")
             for char in service.characteristics:
-                print(f"[ble]:Characteristic: {char.uuid}, properties={char.properties}")
+                logging.info(f"[ble]:Characteristic: {char.uuid}, properties={char.properties}")
 
         # Jos uuid:ta ei ole annettu, lopetetaan ohjelma
         if not uuid:
-            print("[ble]:uuid not given, exiting...")
+            logging.error("[ble]:uuid not given, exiting...")
             return
 
         # Tilataan notifikaatiot ja odotetaan
         try:
-            print(f"[ble]: Starting notifications until {max_sample_count} samples have been captured.")
+            logging.debug(f"[ble]: Starting notifications until {max_sample_count} samples have been captured.")
             await client.start_notify(uuid, notification_handler)
             await stop_event.wait()
         finally:
-            print("[ble]: Stopping notifications...")
+            logging.debug("[ble]: Stopping notifications...")
             await client.stop_notify(uuid)
 
 # -------------------
@@ -259,6 +263,6 @@ async def main_asynchronous():
 try:
     asyncio.run(main_asynchronous())
 except KeyboardInterrupt:
-    print("Interrupted")
+    logging.warning("Interrupted")
 finally:
-    print("Exiting...")
+    logging.info("Exiting...")
