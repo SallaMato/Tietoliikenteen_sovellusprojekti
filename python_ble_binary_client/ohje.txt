@@ -1,0 +1,26 @@
+Ohjelma käyttävää ".env" -tiedostoa, jonne pitää laittaa muuttujat:
+DEVICE_ADDR=""
+CHARACTERISTIC_UUID=""
+
+PACKET_DATA_LEN_BYTES="241"
+TIMER_SECONDS="10"
+MAX_SAMPLE_COUNT="16000"
+LABEL="A"
+
+HUOM! Paketin rakenne täytyy olla:
+1. Tavu = Suunta
+Tämän jälkeen X, Y, Z arvot joista jokainen 16bit.
+
+Alustus (tarvitsee tehdä vain kerran):
+1: Tee python environment komennolla:
+   python -m venv .venv
+
+2: Aiempi komento luo ".venv/Scripts" kansion. Aja sieltä "activate.bat" -komento.
+   Tämä aktivoi python environmentin. Tiedät että olet environmentissa kun komentokehotteeseen tulee
+   "(.venv)" etuliite. Nyt kaikki moduuliasennukset (pip install <module>) asentuvat vain tälle
+   environmentille paikallisesti.
+  
+3: Kokeile ajaa jokin ohjelma. Todennäköisesti saat virheen
+   "ModuleNotFoundError: No module named 'bleak'". Voit asentaa sen "pip install bleak" -komennolla.
+   Toista sama mahdollisten muiden puuttuvien moduuleiden kohdalla.
+'''

@@ -10,8 +10,12 @@ import struct
 import csv
 import time
 import asyncio
+import logging
 from bleak import BleakClient
 from dotenv import load_dotenv
+
+# Logging. Kehitysvaiheessa DEBUG, lopuksi vaihdetaan ERROR
+logging.basicConfig(level=logging.INFO)
 
 # Ladataan ympäristömuuttujat .env tiedostosta.
 load_dotenv()
@@ -37,23 +41,28 @@ label5 =  os.getenv("LABEL_5")
 # Map suunta --> label
 labels = {"0": label0, "1": label1, "2": label2, "3": label3, "4": label4, "5": label5}
 
+# Tallennetaan kaikki samplet ennen kirjoittamista tiedostoon
+rows = []
+
 stop_event = asyncio.Event()
 packet_count = 0
 sample_count = 0
 shutdown_requested = False
 suunta = None
 
+# Sampleja per packet
+samples_per_packet = (packet_data_len_bytes - 1) // 6
+
 def request_shutdown():
     global shutdown_requested
     shutdown_requested = True
-    print(f"{sample_count} samples captured. Stopping capture...")
+    logging.info(f"{sample_count} samples captured. Stopping capture...")
     stop_event.set()
 
 def process_data(buffer):
     global packet_count
     global sample_count
     global shutdown_requested
-    global timer_started
     global suunta
     
     if shutdown_requested:
@@ -61,17 +70,17 @@ def process_data(buffer):
 
     packet_count += 1     
     suunta = buffer[0]
-    print(f"----- Packet {packet_count} -----")
-    for i in range ((packet_data_len_bytes - 1) // 6):
+    logging.debug(f"----- Packet {packet_count} -----")
+    for i in range (samples_per_packet):
         if sample_count < max_sample_count:
             measurement = struct.unpack_from('HHH', buffer, 1+i*6)
-            writer.writerows([[str(measurement[0]), str(measurement[1]), str(measurement[2])]])
-            print(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
+            rows.append([measurement[0], measurement[1], measurement[2]])
+            logging.debug(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
 
         sample_count += 1
         if sample_count == max_sample_count:
             request_shutdown()
-    print("----------\n")
+    logging.debug("----------\n")
     
 def notification_handler(sender, data):
     process_data(data)
@@ -80,13 +89,13 @@ async def main():
     async with BleakClient(addr) as client:
         # Hakee kaikki laitteen servicet ja characteristicit ja tulostaa ne.
         for service in client.services:
-            print(f"Service: {service.uuid}")
+            logging.debug(f"Service: {service.uuid}")
             for char in service.characteristics:
-                print(f"Characteristic: {char.uuid}, properties={char.properties}")
+                logging.info(f"Characteristic: {char.uuid}, properties={char.properties}")
 
         # Jos uuid:ta ei ole annettu, lopetetaan ohjelma
         if not uuid:
-            print("uuid not given, exiting...")
+            logging.error("uuid not given, exiting...")
             return
 
         # Kirjoitetaan csv tiedostolle otsikot
@@ -94,12 +103,13 @@ async def main():
 
         # Tilataan notifikaatiot ja odotetaan
         try:
-            print(f"Starting notifications until {max_sample_count} samples have been captured.")
+            logging.info(f"Starting notifications until {max_sample_count} samples have been captured.")
             await client.start_notify(uuid, notification_handler)
             await stop_event.wait()
         finally:
-            print("Stopping notifications...")
+            logging.info("Stopping notifications...")
             await client.stop_notify(uuid)
+            writer.writerows(rows)
             file.flush()
             file.close()
             # Luodaan tiedosto lopullista sample tiedostoa varten
@@ -109,8 +119,8 @@ async def main():
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
-    print("Interrupted")
+    logging.warning("Interrupted")
 finally:
     # Suljetaan csv tiedosto
     file.close()
-    print("Exiting...")
+    logging.info("Exiting...")
