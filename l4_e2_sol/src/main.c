@@ -9,6 +9,7 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gap.h>
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/conn.h>
 #include <dk_buttons_and_leds.h>
 #include "my_lbs.h"
@@ -17,6 +18,10 @@
 #include <string.h>
 
 extern struct k_msgq fast_adc_msgq;
+
+static struct bt_gatt_exchange_params exchange_params;
+static void exchange_func(struct bt_conn *conn, uint8_t att_err, 
+	struct bt_gatt_exchange_params *params);
 
 static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
 	(BT_LE_ADV_OPT_CONN |
@@ -168,7 +173,18 @@ static void update_data_length(struct bt_conn *conn)
     };
     err = bt_conn_le_data_len_update(conn, &data_len);
     if (err) {
-        LOG_ERR("data_len_update failed (err %d)", err);
+        printk("data_len_update failed (err %d)\n", err);
+    }
+}
+
+static void update_mtu(struct bt_conn *conn)
+{
+    int err;
+    exchange_params.func = exchange_func;
+
+    err = bt_gatt_exchange_mtu(conn, &exchange_params);
+    if (err) {
+        printk("bt_gatt_exchange_mtu failed (err %d)\n", err);
     }
 }
 
@@ -178,9 +194,7 @@ static void on_connected(struct bt_conn *conn, uint8_t err)
 		printk("Connection failed (err %u)\n", err);
 		return;
 	}
-
-	// Tällä ei ollut vaikutusta nopeuteen
-	/*
+	
     const struct bt_conn_le_phy_param preferred_phy = {
         .options = BT_CONN_LE_PHY_OPT_NONE,
         .pref_rx_phy = BT_GAP_LE_PHY_2M,
@@ -189,9 +203,12 @@ static void on_connected(struct bt_conn *conn, uint8_t err)
 
     int result = bt_conn_le_phy_update(conn, &preferred_phy);
     if (result) {
-        LOG_ERR("bt_conn_le_phy_update() returned %d", err);
+        printk("bt_conn_le_phy_update() returned %d\n", err);
     }
-	*/
+	
+	k_sleep(K_MSEC(1000));  // Delay added to avoid link layer collisions.
+	update_data_length(conn);
+	update_mtu(conn);
 
 	printk("Connected\n");
 	dk_set_led_on(CON_STATUS_LED);
@@ -207,11 +224,8 @@ static void on_disconnected(struct bt_conn *conn, uint8_t reason)
 static void on_param_updated(struct bt_conn *conn, uint16_t interval, 
 	uint16_t latency, uint16_t timeout)
 {
-	struct bt_conn_info info;
-    if (!bt_conn_get_info(conn, &info)) {
-        printk("interval=%u\n",
-               info.le.interval);
-    }
+	printk("params updated: interval[%u], latency[%u], timeout[%u]\n",
+		interval, latency, timeout);
 }
 
 void on_le_phy_updated(struct bt_conn *conn, struct bt_conn_le_phy_info *param)
@@ -235,6 +249,16 @@ void on_le_data_len_updated(struct bt_conn *conn, struct bt_conn_le_data_len_inf
     uint16_t rx_len     = info->rx_max_len;
     uint16_t rx_time    = info->rx_max_time;
     printk("Data length updated. Length %d/%d bytes, time %d/%d us\n", tx_len, rx_len, tx_time, rx_time);
+}
+
+static void exchange_func(struct bt_conn *conn, uint8_t att_err,
+			  struct bt_gatt_exchange_params *params)
+{
+	printk("MTU exchange %s\n", att_err == 0 ? "successful" : "failed");
+    if (!att_err) {
+        uint16_t payload_mtu = bt_gatt_get_mtu(conn) - 3;   // 3 bytes used for Attribute headers.
+        printk("New MTU: %d bytes\n", payload_mtu);
+    }
 }
 
 struct bt_conn_cb connection_callbacks = {
