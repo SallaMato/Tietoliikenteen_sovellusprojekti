@@ -39,6 +39,9 @@ stop_event = asyncio.Event()
 packet_count = 0
 shutdown_requested = False
 
+# For debugging
+last_time = None
+
 def request_shutdown():
     global shutdown_requested
     shutdown_requested = True
@@ -60,16 +63,18 @@ def process_captured_packets():
             suunta = packet[0] # Jokaisen paketin 1. tavu sisältää suunnan, tarvitaanko??
             for i in range (samples_per_packet):
                 measurement = struct.unpack_from('HHH', packet, 1+i*6)
-                logging.debug(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
+                # logging.debug(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
                 np.save(f, measurement)
                 sample_count += 1
                 if(sample_count >= max_sample_count):
-                    logging.debug(f"{sample_count} samples saved to file.")
+                    logging.info(f"{sample_count} samples saved to file.")
                     return
 
 
 def notification_handler(sender, data):
     global packet_count
+    global last_time
+    
     if packet_count >= num_packets_to_capture:
         if shutdown_requested == False:
             request_shutdown()
@@ -83,7 +88,12 @@ def notification_handler(sender, data):
     packet_count += 1
 
     if packet_count % 50 == 0:
-        logging.debug(f"packet_count: {packet_count}")
+        logging.info(f"packet_count: {packet_count}")
+        now = time.perf_counter()
+        if last_time is not None:
+            dt = now - last_time
+            logging.info(f"50 packets took {dt:.3f}s " f"({50/dt:.1f} packets/s)")
+        last_time = now
 
 async def main():
     async with BleakClient(addr) as client:

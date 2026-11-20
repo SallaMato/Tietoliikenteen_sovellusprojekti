@@ -1,3 +1,4 @@
+*.npy
 *.env
 *.csv
 *.o
