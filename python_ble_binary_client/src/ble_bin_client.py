@@ -17,7 +17,7 @@ from bleak import BleakClient
 from dotenv import load_dotenv
 
 # Logging. Kehitysvaiheessa DEBUG, lopuksi vaihdetaan ERROR
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 # Ladataan ympäristömuuttujat .env tiedostosta.
 load_dotenv()
@@ -48,27 +48,25 @@ def request_shutdown():
     stop_event.set()
 
 def process_captured_packets():
-    # Tehdään kansio dataa varten, jos sitä ei ole jo olemassa
     os.makedirs(f"../data/{label}", exist_ok=True)
-
-    # Formatoidaan tiedostonimi
     filename = f"../data/{label}/data_{label}_S{max_sample_count}_{int(time.time())}.npy"
 
-    # Sample laskuri
+    # Kerätään kaikki näytteet ensin yhteen (16000, 3) taulukkoon
+    all_samples = np.zeros((max_sample_count, 3), dtype=np.uint16)
     sample_count = 0
 
-    # Avataan tiedosto binary kirjoitusta varten, ja kirjoitetaan x,y,z samplet tiedostoon
-    with open(filename, 'wb') as f:
-        for packet in packets:
-            suunta = packet[0] # Jokaisen paketin 1. tavu sisältää suunnan, tarvitaanko??
-            for i in range (samples_per_packet):
-                measurement = struct.unpack_from('HHH', packet, 1+i*6)
-                # logging.debug(f"suunta: {suunta}, x: {measurement[0]}, y: {measurement[1]}, z: {measurement[2]}")
-                np.save(f, measurement)
-                sample_count += 1
-                if(sample_count >= max_sample_count):
-                    logging.info(f"{sample_count} samples saved to file.")
-                    return
+    for packet in packets:
+        for i in range(samples_per_packet):
+            if sample_count >= max_sample_count:
+                break
+            all_samples[sample_count] = struct.unpack_from('HHH', packet, 1 + i * 6)
+            sample_count += 1
+        if sample_count >= max_sample_count:
+            break
+
+    # Tallennetaan koko taulukko yhdellä kertaa oikeassa (16000, 3) muodossa
+    np.save(filename, all_samples)
+    logging.info(f"Tallennettu {sample_count} näytettä -> {filename} (muoto: {all_samples.shape})")
 
 
 def notification_handler(sender, data):
@@ -95,33 +93,46 @@ def notification_handler(sender, data):
             logging.info(f"50 packets took {dt:.3f}s " f"({50/dt:.1f} packets/s)")
         last_time = now
 
-async def main():
-    async with BleakClient(addr) as client:
-        # Hakee kaikki laitteen servicet ja characteristicit ja tulostaa ne.
-        for service in client.services:
-            logging.debug(f"Service: {service.uuid}")
-            for char in service.characteristics:
-                logging.info(f"Characteristic: {char.uuid}, properties={char.properties}")
+    if packet_count >= num_packets_to_capture:
+        if shutdown_requested == False:
+            request_shutdown()
 
-        # Jos uuid:ta ei ole annettu, lopetetaan ohjelma
+async def main():
+
+    global packet_count, shutdown_requested, last_time
+    saved_files = 0
+
+    async with BleakClient(addr) as client:
         if not uuid:
             logging.error("uuid not given, exiting...")
             return
 
-        # Tilataan notifikaatiot ja odotetaan
+# Tilataan notifikaatiot vain kerran alussa
+        await client.start_notify(uuid, notification_handler)
         try:
-            logging.info(f"Starting notifications until {max_sample_count} samples have been captured.")
-            await client.start_notify(uuid, notification_handler)
-            await stop_event.wait()
+            while True:
+                # Nollataan laskurit uutta näytettä varten
+                packet_count = 0
+                shutdown_requested = False
+                last_time = None
+                stop_event.clear()
+
+                logging.info(f"\n>>> Valmiina näytteeseen #{saved_files + 1} (kirjain {label}). <<<")
+                await stop_event.wait()
+
+                logging.info("Kirjoitetaan näyte tiedostoon...")
+                process_captured_packets()
+                saved_files += 1
+
+                # Pieni tauko, jotta mahdolliset ylijäämäpaketit eivät mene seuraavaan näytteeseen
+                await asyncio.sleep(1.0)
         finally:
             logging.info("Stopping notifications...")
             await client.stop_notify(uuid)
-            logging.info("Writing samples to file...")
-            process_captured_packets() # Tallentaa pakettien sisältämät samplet tiedostoon
 
 try:
     asyncio.run(main())
 except KeyboardInterrupt:
-    logging.warning("Interrupted")
+    logging.warning("Lopetettu käyttäjän toimesta (Ctrl+C)")
 finally:
     logging.info("Exiting...")

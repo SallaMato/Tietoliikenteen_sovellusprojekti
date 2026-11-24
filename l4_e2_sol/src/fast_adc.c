@@ -19,7 +19,7 @@ LOG_MODULE_REGISTER(FastADC, LOG_LEVEL_INF);
 /* STEP 3.1 - Define the SAADC sample interval in microseconds */
 // 16 000 näytettä varten kahden jakson välinen aika olisi 62,5us. Tässä voi käyttää vain kokonaislukuja, joten pyöristetään.
 //Voi myös kokeilla muuttaa ajastimen käyttämään suoraan ajastimen kelloa.
-#define SAADC_SAMPLE_INTERVAL_US 62
+#define SAADC_SAMPLE_INTERVAL_US 125
 
 /* STEP 4.1 - Define the buffer size for the SAADC */
 // SAADC tallentaa dataa puskuriin saadc_sample_buffer. Kun mitataan kolmea kanavaa, joka kerta kun ajastin laukaisee

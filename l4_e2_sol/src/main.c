@@ -51,6 +51,7 @@ LOG_MODULE_REGISTER(Lesson4_Exercise2, LOG_LEVEL_INF);
 static bool app_button_state;
 static struct k_work adv_work;
 static bool should_collect_data = false;
+static int packets_sent = 0;
 
 //(0 = X alas, 1 = X ylos, 2 = Y alas, 3 = Y ylös, 4 = Z alas, 5 = Z ylös)
 volatile int suunta = 0;
@@ -130,6 +131,14 @@ void send_data_thread(void)
 				int err = my_lbs_send_payload(ble_payload, sizeof(ble_payload));
 				if (err) {
     				printk("notify err: %d\n", err);
+				} else {
+					// 
+					packets_sent++;
+					if (packets_sent >= 410) { // 400 * 40 = 16 000 näytettä
+						should_collect_data = false;
+						dk_set_led_off(USER_LED);
+						printk("16 000 näytettä lähetetty.\n");
+					}
 				}
 			}
 		}
@@ -159,8 +168,11 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 		/* STEP 6 - Send indication on a button press */
 		//my_lbs_send_button_state_indicate(user_button_state);
 		app_button_state = user_button_state ? true : false;
-		should_collect_data = true;
-		printk("Nappia 2 painettu");
+		if (user_button_state && !should_collect_data) {
+			packets_sent = 0;
+			should_collect_data = true;
+			printk("Nappia 2 painettu\n");
+		}
 	}
 }
 
