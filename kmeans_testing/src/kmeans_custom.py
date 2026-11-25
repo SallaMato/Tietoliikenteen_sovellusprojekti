@@ -38,7 +38,7 @@ import matplotlib.pyplot as plt
 from numpy import genfromtxt
 
 # Plotting enabled/disabled
-plot: bool = True
+plot: bool = False
 
 # Thanks to broadcasting, this will expand into sqrt((x2 - x1)^2 + (y2 - y1)^2) + ... + (n2 -n1)^2)
 # In other words, it will work with any array dimensions
@@ -129,7 +129,8 @@ def plot_raw(X, centroids):
 k = 6
 
 # Read data
-X = genfromtxt('data.csv', delimiter=',')
+X = genfromtxt('data_0_S160000_1795623698.csv', delimiter=',')
+# X = genfromtxt('simple_demo_data.csv', delimiter=',')
 
 # Will store the best cluster set
 final_clusters = []
@@ -137,8 +138,8 @@ final_centroids = []
 
 # How many times we repeat the entire thing with new starting centroids
 # The clustering with least amount of variance of all clusters will win
-max_outer_iterations = 1
-smallest_error = 99999
+max_outer_iterations = 5
+smallest_error = float("inf")
 for i in range(max_outer_iterations):    
     print(f"Running ({i+1}/{max_outer_iterations})")
     
@@ -157,11 +158,17 @@ for i in range(max_outer_iterations):
     # How many times we adjust the centroids and re-cluster
     max_inner_iterations = 10
     for j in range(max_inner_iterations):
+        print(f"Iteration {j+1} (max: {max_inner_iterations})")
+        
         # Init clusters array
         clusters =  [[] for _ in range(k)]
 
         # Assign all samples into clusters.
         assign_to_clusters(X, clusters, centroids)
+
+        print("Cluster sizes:")
+        for c in range(len(clusters)):
+            print(f"cluster {c}: {len(clusters[c])}")
 
         # Convert python lists to numpy arrays so that we can use index slicing for plotting
         clusters = [np.array(cluster) for cluster in clusters]
