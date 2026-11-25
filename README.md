@@ -16,8 +16,7 @@ Lisäominaisuutena toteutettiin kynään kiinnitettävä mittauslaite, jonka avu
 
 ## Projektin suunnittelu ja valmistelu sekä Projektin arkkitehtuuri (v0.1)
 
-<img width="845" height="715" alt="image" src="https://github.com/user-attachments/assets/fe459390-b74b-458d-b7c3-0289d769b75c" />
-
+<img width="947" height="612" alt="image" src="https://github.com/user-attachments/assets/fecb8c7b-5711-4a87-a214-9713cf179eba" />
 ---
 
 ## Käytetyt teknologiat
