@@ -1,0 +1,7 @@
+&timer2 {
+    status = "okay";
+};
+
+&adc {
+    status = "okay";
+};

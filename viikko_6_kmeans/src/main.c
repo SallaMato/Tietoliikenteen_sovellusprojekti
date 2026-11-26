@@ -1,0 +1,377 @@
+/*
+ * Copyright (c) 2023 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/gap.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/conn.h>
+#include <dk_buttons_and_leds.h>
+#include "my_lbs.h"
+#include "fast_adc.h"
+#include "confusion.h"
+//muistikopiointia varten (memcpy)
+#include <string.h>
+
+extern struct k_msgq fast_adc_msgq;
+
+static struct bt_gatt_exchange_params exchange_params;
+static void exchange_func(struct bt_conn *conn, uint8_t att_err, 
+	struct bt_gatt_exchange_params *params);
+
+static const struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(
+	(BT_LE_ADV_OPT_CONN |
+	 BT_LE_ADV_OPT_USE_IDENTITY), /* Connectable advertising and use identity address */
+	800, /* Min Advertising Interval 500ms (800*0.625ms) */
+	801, /* Max Advertising Interval 500.625ms (801*0.625ms) */
+	NULL); /* Set to NULL for undirected advertising */
+
+LOG_MODULE_REGISTER(Lesson4_Exercise2, LOG_LEVEL_INF);
+
+#define DEVICE_NAME CONFIG_BT_DEVICE_NAME
+#define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
+
+#define RUN_STATUS_LED DK_LED1
+#define CON_STATUS_LED DK_LED2
+#define USER_LED DK_LED3
+
+#define USER_BUTTON DK_BTN1_MSK
+#define USER_BUTTON2 DK_BTN2_MSK
+#define USER_BUTTON_1           DK_BTN1_MSK // Vaihda suunta
+#define USER_BUTTON_2           DK_BTN2_MSK // Lähetä BLE data
+#define USER_BUTTON_3           DK_BTN3_MSK // Kerää confusion matrix dataa
+#define USER_BUTTON_4           DK_BTN4_MSK // Tulosta ja resetoi confusion matrix
+
+// 0 = changes direction when button 1 is pressed
+// 1 = fake 100 measurements done to each 6 directions when 3 pressed.
+#define DEBUG 1
+
+#define STACKSIZE 1024
+#define PRIORITY 7
+
+#define RUN_LED_BLINK_INTERVAL 1000
+#define NOTIFY_INTERVAL 500
+static bool app_button_state;
+static struct k_work adv_work;
+static bool should_collect_ble_data = false;
+static bool should_collect_kmeans_data = false;
+static int packets_sent = 0;
+
+uint8_t ble_payload[241];
+
+//(0 = X alas, 1 = X ylos, 2 = Y alas, 3 = Y ylös, 4 = Z alas, 5 = Z ylös)
+volatile int suunta = 0;
+
+static const struct bt_data ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+
+};
+
+static const struct bt_data sd[] = {
+	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_LBS_VAL),
+};
+
+static void adv_work_handler(struct k_work *work)
+{
+	int err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+
+	if (err) {
+		printk("Advertising failed to start (err %d)\n", err);
+		return;
+	}
+
+	printk("Advertising successfully started\n");
+}
+static void advertising_start(void)
+{
+	k_work_submit(&adv_work);
+}
+static void recycled_cb(void)
+{
+	printk("Connection object available from previous conn. Disconnect is complete!\n");
+	advertising_start();
+}
+
+static void app_led_cb(bool led_state)
+{
+	dk_set_led(USER_LED, led_state);
+}
+
+static bool app_button_cb(void)
+{
+	return app_button_state;
+}
+
+/* STEP 18.1 - Define the thread function  */
+void send_data_thread(void)
+{
+	struct fast_adc_msg msg; //Muuttuja, johon tallennetaan viestijonosta luettu viesti (struct fast_adc_msg)
+
+	//Luodaan BLE-paketti (1 tavu suunta + 240 tavua dataa = 241 tavua)
+
+    // uint8_t ble_payload[241];
+	
+	while (1) {
+
+		// k_msgq_get pysäyttää tämän säikeen (se menee nukkumaan) K_FOREVER-ajaksi,
+		// kunnes viestijonossa on viesti fast_adc.c:stä.
+		// Kun viesti tulee, se tallentuu 'msg' muuttujaan.
+		if (k_msgq_get(&fast_adc_msgq, &msg, K_FOREVER) == 0) {
+
+			//Nyt data on kerätty. msg.buffer on taulukko (X, Y,Z, X, Y,Z..) ja msg.size on 300.
+			/*
+			printk("Paketti saatu. Suunta: %d,Ensimmäinen näyte: X:%d Y:%d Z:%d\n", 
+					suunta, msg.buffer[0], msg.buffer[1], msg.buffer[2]);
+			*/
+			
+			//Laitetaan suunta paketin ensimmäiseksi tavuksi
+			ble_payload[0] = suunta;
+			
+			// Kopioidaan ADC-data (120 int16_t arvoa = 240 tavua) suunnan perään.
+			// msg.buffer sisältää datan.
+			memcpy(&ble_payload[1], msg.buffer, 240);
+
+			//Lähetetään 241 tavun paketti BLE yli
+			if (should_collect_ble_data) {
+				int err = my_lbs_send_payload(ble_payload, sizeof(ble_payload));
+				if (err) {
+    				printk("notify err: %d\n", err);
+				} else {
+					// 
+					packets_sent++;
+					if (packets_sent >= 410) { // 400 * 40 = 16 000 näytettä
+						should_collect_ble_data = false;
+						dk_set_led_off(USER_LED);
+						printk("16 000 näytettä lähetetty.\n");
+					}
+				}
+			}
+			// Kmeans (analysoi yhden paketin ja tekee confusion matrixin)
+			else if(should_collect_kmeans_data){
+				classifyAndUpdateConfusionMatrix(ble_payload, sizeof(ble_payload));
+				should_collect_kmeans_data = false;
+			}
+		}
+	}
+}
+
+static struct my_lbs_cb app_callbacks = {
+	.led_cb = app_led_cb,
+	.button_cb = app_button_cb,
+};
+
+static void button_changed(uint32_t button_state, uint32_t has_changed)
+{
+	if (has_changed & USER_BUTTON_1) {
+		uint32_t user_button_state = button_state & USER_BUTTON;
+		/* STEP 6 - Send indication on a button press */
+		my_lbs_send_button_state_indicate(user_button_state);
+		app_button_state = user_button_state ? true : false;
+		if (user_button_state) {
+			suunta = (suunta + 1) % 6;
+
+			uint16_t* x = (uint16_t*)(ble_payload + 1);
+			uint16_t* y = (uint16_t*)(ble_payload + 3);
+			uint16_t* z = (uint16_t*)(ble_payload + 5);
+			printk("Suunta: %d, X:%d Y:%d Z:%d\n", suunta, *x, *y, *z);
+		} 
+	}
+
+	if (has_changed & USER_BUTTON_2) {
+		uint32_t user_button_state = button_state & USER_BUTTON2;
+		/* STEP 6 - Send indication on a button press */
+		//my_lbs_send_button_state_indicate(user_button_state);
+		app_button_state = user_button_state ? true : false;
+		if (user_button_state && !should_collect_ble_data) {
+			packets_sent = 0;
+			should_collect_ble_data = true;
+			printk("Nappia 2 painettu\n");
+		}
+	}
+
+	if ((has_changed & USER_BUTTON_3) && (button_state & USER_BUTTON_3)) 
+	{
+		if (!should_collect_kmeans_data) {
+			packets_sent = 0;
+			should_collect_kmeans_data = true;
+		}
+	}		
+
+	if ((has_changed & USER_BUTTON_4) && (button_state & USER_BUTTON_4)) 
+	{
+		printConfusionMatrix();
+		resetConfusionMatrix();
+	}
+}
+
+static void update_data_length(struct bt_conn *conn)
+{
+    int err;
+    struct bt_conn_le_data_len_param data_len = {
+        .tx_max_len = BT_GAP_DATA_LEN_MAX,
+        .tx_max_time = BT_GAP_DATA_TIME_MAX,
+    };
+    err = bt_conn_le_data_len_update(conn, &data_len);
+    if (err) {
+        printk("data_len_update failed (err %d)\n", err);
+    }
+}
+
+static void update_mtu(struct bt_conn *conn)
+{
+    int err;
+    exchange_params.func = exchange_func;
+
+    err = bt_gatt_exchange_mtu(conn, &exchange_params);
+    if (err) {
+        printk("bt_gatt_exchange_mtu failed (err %d)\n", err);
+    }
+}
+
+static void on_connected(struct bt_conn *conn, uint8_t err)
+{
+	if (err) {
+		printk("Connection failed (err %u)\n", err);
+		return;
+	}
+	
+    const struct bt_conn_le_phy_param preferred_phy = {
+        .options = BT_CONN_LE_PHY_OPT_NONE,
+        .pref_rx_phy = BT_GAP_LE_PHY_2M,
+        .pref_tx_phy = BT_GAP_LE_PHY_2M,
+    };
+
+    int result = bt_conn_le_phy_update(conn, &preferred_phy);
+    if (result) {
+        printk("bt_conn_le_phy_update() returned %d\n", err);
+    }
+	
+	k_sleep(K_MSEC(1000));  // Delay added to avoid link layer collisions.
+	update_data_length(conn);
+	update_mtu(conn);
+
+	printk("Connected\n");
+	dk_set_led_on(CON_STATUS_LED);
+}
+
+static void on_disconnected(struct bt_conn *conn, uint8_t reason)
+{
+	printk("Disconnected (reason %u)\n", reason);
+
+	dk_set_led_off(CON_STATUS_LED);
+}
+
+static void on_param_updated(struct bt_conn *conn, uint16_t interval, 
+	uint16_t latency, uint16_t timeout)
+{
+	printk("params updated: interval[%u], latency[%u], timeout[%u]\n",
+		interval, latency, timeout);
+}
+
+void on_le_phy_updated(struct bt_conn *conn, struct bt_conn_le_phy_info *param)
+{
+    // PHY Updated
+    if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_1M) {
+        printk("PHY updated. New PHY: 1M\n");
+    }
+    else if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_2M) {
+        printk("PHY updated. New PHY: 2M\n");
+    }
+    else if (param->tx_phy == BT_CONN_LE_TX_POWER_PHY_CODED_S8) {
+        printk("PHY updated. New PHY: Long Range\n");
+    }
+}
+
+void on_le_data_len_updated(struct bt_conn *conn, struct bt_conn_le_data_len_info *info)
+{
+    uint16_t tx_len     = info->tx_max_len; 
+    uint16_t tx_time    = info->tx_max_time;
+    uint16_t rx_len     = info->rx_max_len;
+    uint16_t rx_time    = info->rx_max_time;
+    printk("Data length updated. Length %d/%d bytes, time %d/%d us\n", tx_len, rx_len, tx_time, rx_time);
+}
+
+static void exchange_func(struct bt_conn *conn, uint8_t att_err,
+			  struct bt_gatt_exchange_params *params)
+{
+	printk("MTU exchange %s\n", att_err == 0 ? "successful" : "failed");
+    if (!att_err) {
+        uint16_t payload_mtu = bt_gatt_get_mtu(conn) - 3;   // 3 bytes used for Attribute headers.
+        printk("New MTU: %d bytes\n", payload_mtu);
+    }
+}
+
+struct bt_conn_cb connection_callbacks = {
+	.connected = on_connected,
+	.disconnected = on_disconnected,
+	.recycled = recycled_cb,
+	.le_param_updated = on_param_updated,
+	.le_phy_updated = on_le_phy_updated,
+	.le_data_len_updated = on_le_data_len_updated
+};
+
+static int init_button(void)
+{
+	int err;
+
+	err = dk_buttons_init(button_changed);
+	if (err) {
+		printk("Cannot init buttons (err: %d)\n", err);
+	}
+
+	return err;
+}
+
+int main(void)
+{
+	int blink_status = 0;
+	int err;
+
+	LOG_INF("Starting Lesson 4 - Exercise 2 \n");
+
+	err = dk_leds_init();
+	if (err) {
+		LOG_ERR("LEDs init failed (err %d)\n", err);
+		return -1;
+	}
+
+	err = init_button();
+	if (err) {
+		printk("Button init failed (err %d)\n", err);
+		return -1;
+	}
+
+	err = bt_enable(NULL);
+	if (err) {
+		LOG_ERR("Bluetooth init failed (err %d)\n", err);
+		return -1;
+	}
+
+	bt_conn_cb_register(&connection_callbacks);
+
+	err = my_lbs_init(&app_callbacks);
+	if (err) {
+		printk("Failed to init LBS (err:%d)\n", err);
+		return -1;
+	}
+
+	LOG_INF("Bluetooth initialized\n");
+	k_work_init(&adv_work, adv_work_handler);
+	advertising_start();
+
+	// Käynnistetään nopea ADC
+	fast_adc_init_and_start();
+
+	for (;;) {
+		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);
+		k_sleep(K_MSEC(RUN_LED_BLINK_INTERVAL));
+	}
+}
+/* STEP 18.2 - Define and initialize a thread to send data periodically */
+K_THREAD_DEFINE(send_data_thread_id, STACKSIZE, send_data_thread, NULL, NULL, NULL, PRIORITY, 0, 0);
